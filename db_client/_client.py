@@ -28,7 +28,7 @@ class DbClient:
         """DbClientを初期化する.
 
         dsnを省略した場合は ``.env`` ファイルまたは環境変数 ``DATABASE_URL`` から接続文字列を読み込む。
-        どちらも設定されていない場合は ``DbClientError`` を発生させる。
+        どちらも設定されていない場合は ``DsnNotConfiguredError`` を発生させる。
 
         Args:
             dsn (str | None): PostgreSQL接続文字列
