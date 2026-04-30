@@ -126,8 +126,15 @@ class DbClient:
 
         Returns:
             pd.DataFrame: 取得したDataFrame。該当レコードが存在しない場合は空のDataFrameを返す
+
+        Raises:
+            ValueError: table_nameが無効、またはcolumnsが空リストの場合
         """
         self._validate_table_name(table_name)
+
+        if columns is not None and len(columns) == 0:
+            msg = "columnsが空リストです。カラムを指定するか、Noneを指定してください。"
+            raise ValueError(msg)
 
         col_clause = ", ".join(f'"{col}"' for col in columns) if columns is not None else "*"
 
