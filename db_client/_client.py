@@ -50,10 +50,10 @@ class DbClient:
             raise DsnNotConfiguredError(msg)
         self._engine: Engine = create_engine(resolved_dsn)
 
-    @staticmethod
-    def _validate_table_name(table_name: str) -> None:
+    def _validate_table_name(self, table_name: str) -> None:
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
             msg = f"無効なテーブル名です: {table_name!r}"
+            self._logger.error(msg)
             raise ValueError(msg)
 
     def upsert(self, table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> None:
@@ -75,11 +75,13 @@ class DbClient:
 
         if not primary_keys:
             msg = "primary_keysが空です。"
+            self._logger.error(msg)
             raise ValueError(msg)
 
         unknown_keys = set(primary_keys) - set(df.columns)
         if unknown_keys:
             msg = f"primary_keysにdf.columnsに存在しないキーが含まれています: {unknown_keys}"
+            self._logger.error(msg)
             raise ValueError(msg)
 
         if df.empty:
@@ -134,6 +136,7 @@ class DbClient:
 
         if columns is not None and len(columns) == 0:
             msg = "columnsが空リストです。カラムを指定するか、Noneを指定してください。"
+            self._logger.error(msg)
             raise ValueError(msg)
 
         col_clause = ", ".join(f'"{col}"' for col in columns) if columns is not None else "*"
