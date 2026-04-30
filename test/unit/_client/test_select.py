@@ -18,6 +18,7 @@ def mock_engine(mocker: MockerFixture) -> Engine:
 def client(mocker: MockerFixture, mock_engine: Engine) -> DbClient:
     """モックエンジンを使用するDbClientインスタンス."""
     mocker.patch("db_client._client.create_engine", return_value=mock_engine)
+    mocker.patch("db_client._client.load_dotenv")
     return DbClient(dsn="postgresql://user:pass@localhost:5432/test")
 
 
@@ -29,8 +30,8 @@ def test_select_returns_dataframe(
     expected = pd.DataFrame({"race_code": ["202301010101"], "rating": [1500.0]})
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.connect.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
     mocker.patch("db_client._client.pd.read_sql", return_value=expected)
 
     result = client.select(table_name="ratings")
@@ -47,8 +48,8 @@ def test_select_with_where_condition(
     expected = pd.DataFrame({"race_code": ["202301010101"], "rating": [1500.0]})
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.connect.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
     mock_read_sql = mocker.patch("db_client._client.pd.read_sql", return_value=expected)
 
     client.select(table_name="ratings", where={"race_code": "202301010101"})
@@ -64,8 +65,8 @@ def test_select_with_columns(client: DbClient, mock_engine: Engine, mocker: Mock
     expected = pd.DataFrame({"race_code": ["202301010101"]})
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.connect.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
     mock_read_sql = mocker.patch("db_client._client.pd.read_sql", return_value=expected)
 
     client.select(table_name="ratings", columns=["race_code"])
@@ -83,8 +84,8 @@ def test_select_without_where_uses_asterisk(
     expected = pd.DataFrame()
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.connect.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
     mock_read_sql = mocker.patch("db_client._client.pd.read_sql", return_value=expected)
 
     client.select(table_name="ratings")
@@ -103,8 +104,8 @@ def test_select_returns_empty_dataframe_when_no_records(
     empty_df = pd.DataFrame()
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.connect.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
     mocker.patch("db_client._client.pd.read_sql", return_value=empty_df)
 
     result = client.select(table_name="ratings", where={"race_code": "nonexistent"})

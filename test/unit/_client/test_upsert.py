@@ -18,6 +18,7 @@ def mock_engine(mocker: MockerFixture) -> Engine:
 def client(mocker: MockerFixture, mock_engine: Engine) -> DbClient:
     """モックエンジンを使用するDbClientインスタンス."""
     mocker.patch("db_client._client.create_engine", return_value=mock_engine)
+    mocker.patch("db_client._client.load_dotenv")
     return DbClient(dsn="postgresql://user:pass@localhost:5432/test")
 
 
@@ -28,8 +29,8 @@ def test_upsert_executes_insert_on_conflict(
     """DataFrameのレコードをINSERT ON CONFLICTで実行する."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     df = pd.DataFrame({"race_code": ["202301010101"], "uma_ban": [1], "rating": [1500.0]})
     client.upsert(table_name="ratings", df=df, primary_keys=["race_code", "uma_ban"])
@@ -48,8 +49,8 @@ def test_upsert_with_only_primary_keys_uses_do_nothing(
     """非主キーカラムがない場合はDO NOTHINGを使う."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     df = pd.DataFrame({"race_code": ["202301010101"], "uma_ban": [1]})
     client.upsert(table_name="ratings", df=df, primary_keys=["race_code", "uma_ban"])
@@ -65,8 +66,8 @@ def test_upsert_passes_records_to_execute(
     """DataFrameのレコードをexecuteに渡す."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     df = pd.DataFrame({"race_code": ["202301010101", "202301010102"], "rating": [1500.0, 1600.0]})
     client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
@@ -84,4 +85,4 @@ def test_upsert_does_nothing_when_df_is_empty(client: DbClient, mock_engine: Eng
     df = pd.DataFrame(columns=["race_code", "rating"])
     client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
 
-    mock_engine.begin.assert_not_called()  # type: ignore[attr-defined]
+    mock_engine.begin.assert_not_called()

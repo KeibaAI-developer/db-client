@@ -18,6 +18,7 @@ def mock_engine(mocker: MockerFixture) -> Engine:
 def client(mocker: MockerFixture, mock_engine: Engine) -> DbClient:
     """モックエンジンを使用するDbClientインスタンス."""
     mocker.patch("db_client._client.create_engine", return_value=mock_engine)
+    mocker.patch("db_client._client.load_dotenv")
     return DbClient(dsn="postgresql://user:pass@localhost:5432/test")
 
 
@@ -28,8 +29,8 @@ def test_delete_executes_delete_statement(
     """whereが指定された場合にDELETE文を実行する."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     client.delete(table_name="ratings", where={"race_code": "202301010101"})
 
@@ -47,8 +48,8 @@ def test_delete_with_multiple_conditions(
     """複数のwhere条件がAND結合でSQL文に含まれる."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     client.delete(
         table_name="ratings",
@@ -66,8 +67,8 @@ def test_delete_passes_params_to_execute(
     """whereの値がexecuteのparamとして渡される."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     client.delete(table_name="ratings", where={"race_code": "202301010101"})
 

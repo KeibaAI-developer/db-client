@@ -10,6 +10,7 @@ def mock_client(mocker: MockerFixture) -> tuple[DbClient, Engine]:
     """モックエンジンを使用するDbClientインスタンスとエンジンを返す."""
     mock_engine = mocker.MagicMock(spec=Engine)
     mocker.patch("db_client._client.create_engine", return_value=mock_engine)
+    mocker.patch("db_client._client.load_dotenv")
     client = DbClient(dsn="postgresql://user:pass@localhost:5432/test")
     return client, mock_engine
 
@@ -20,8 +21,8 @@ def test_delete_all_executes_delete_without_where(mocker: MockerFixture) -> None
     client, mock_engine = mock_client(mocker)
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     client.delete_all(table_name="ratings")
 
@@ -37,8 +38,8 @@ def test_delete_all_passes_no_params(mocker: MockerFixture) -> None:
     client, mock_engine = mock_client(mocker)
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
-    mock_engine.begin.return_value.__enter__ = enter  # type: ignore[attr-defined]
-    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)  # type: ignore[attr-defined]  # noqa: E501
+    mock_engine.begin.return_value.__enter__ = enter
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
 
     client.delete_all(table_name="ratings")
 
