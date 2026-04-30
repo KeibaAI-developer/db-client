@@ -66,8 +66,21 @@ class DbClient:
             table_name (str): 対象テーブル名
             df (pd.DataFrame): 保存するDataFrame。カラム名がDBカラム名にマッピングされる
             primary_keys (list[str]): 重複判定に使用する主キーカラム名のリスト
+
+        Raises:
+            ValueError: table_nameが無効、primary_keysが空、またはprimary_keysにdf.columnsに
+                存在しないキーが含まれる場合
         """
         self._validate_table_name(table_name)
+
+        if not primary_keys:
+            msg = "primary_keysが空です。"
+            raise ValueError(msg)
+
+        unknown_keys = set(primary_keys) - set(df.columns)
+        if unknown_keys:
+            msg = f"primary_keysにdf.columnsに存在しないキーが含まれています: {unknown_keys}"
+            raise ValueError(msg)
 
         if df.empty:
             self._logger.debug("upsert: dfが空のため何もしません (table=%s)", table_name)
