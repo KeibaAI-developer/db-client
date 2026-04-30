@@ -5,6 +5,7 @@ PostgreSQLとのデータ入出力を行うDbClientクラスを提供する。
 
 import logging
 import os
+import re
 from typing import Any, cast
 
 import pandas as pd
@@ -49,6 +50,12 @@ class DbClient:
             raise DsnNotConfiguredError(msg)
         self._engine: Engine = create_engine(resolved_dsn)
 
+    @staticmethod
+    def _validate_table_name(table_name: str) -> None:
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
+            msg = f"無効なテーブル名です: {table_name!r}"
+            raise ValueError(msg)
+
     def upsert(self, table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> None:
         """DataFrameを指定テーブルにupsertする.
 
@@ -60,6 +67,8 @@ class DbClient:
             df (pd.DataFrame): 保存するDataFrame。カラム名がDBカラム名にマッピングされる
             primary_keys (list[str]): 重複判定に使用する主キーカラム名のリスト
         """
+        self._validate_table_name(table_name)
+
         if df.empty:
             self._logger.debug("upsert: dfが空のため何もしません (table=%s)", table_name)
             return
@@ -105,6 +114,8 @@ class DbClient:
         Returns:
             pd.DataFrame: 取得したDataFrame。該当レコードが存在しない場合は空のDataFrameを返す
         """
+        self._validate_table_name(table_name)
+
         col_clause = ", ".join(f'"{col}"' for col in columns) if columns is not None else "*"
 
         query = f"SELECT {col_clause} FROM {table_name}"
@@ -132,6 +143,8 @@ class DbClient:
         Raises:
             EmptyWhereError: where が空の場合（全件削除の誤操作を防ぐ）
         """
+        self._validate_table_name(table_name)
+
         if not where:
             msg = "where条件が空です。全件削除を防ぐため、必ず条件を指定してください。"
             self._logger.error(msg)
@@ -155,6 +168,8 @@ class DbClient:
         Args:
             table_name (str): 対象テーブル名
         """
+        self._validate_table_name(table_name)
+
         sql = text(f"DELETE FROM {table_name}")
 
         self._logger.debug("delete_all: 全レコードを削除します (table=%s)", table_name)
