@@ -122,8 +122,9 @@ class DbClient:
 
         Args:
             table_name (str): 対象テーブル名
-            where (dict[str, Any] | None): フィルタ条件。``{カラム名: 値}`` 形式で指定する
-                （AND結合）。Noneの場合は全件取得
+            where (dict[str, Any] | None): フィルタ条件（AND結合）。Noneの場合は全件取得。
+                値がリストの場合はIN条件（``{カラム名: [値1, 値2, ...]}``）、
+                それ以外は等値条件（``{カラム名: 値}``）として扱う
             columns (list[str] | None): 取得するカラム名のリスト。Noneの場合は全カラムを取得
 
         Returns:
@@ -145,9 +146,17 @@ class DbClient:
         params: dict[str, Any] = {}
 
         if where:
-            conditions = " AND ".join(f'"{key}" = :where_{key}' for key in where)
-            query += f" WHERE {conditions}"
-            params = {f"where_{key}": val for key, val in where.items()}
+            conditions_list = []
+            for key, val in where.items():
+                if isinstance(val, list):
+                    placeholders = ", ".join(f":where_{key}_{i}" for i in range(len(val)))
+                    conditions_list.append(f'"{key}" IN ({placeholders})')
+                    for i, v in enumerate(val):
+                        params[f"where_{key}_{i}"] = v
+                else:
+                    conditions_list.append(f'"{key}" = :where_{key}')
+                    params[f"where_{key}"] = val
+            query += " WHERE " + " AND ".join(conditions_list)
 
         self._logger.debug("select: クエリを実行します (table=%s, where=%s)", table_name, where)
         with self._engine.connect() as conn:
