@@ -84,6 +84,25 @@ def test_select_latest_per_group_with_where_adds_where_clause(
     assert '"target"' in sql_str
 
 
+def test_select_latest_per_group_where_applied_to_subquery(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """where条件が相関サブクエリ（t2）にも適用される."""
+    mock_read_sql = _setup_read_sql(mocker, mock_engine, pd.DataFrame())
+
+    client.select_latest_per_group(
+        table_name="ratings",
+        group_by="target_id",
+        order_by="race_code",
+        where={"target": "horse", "target_id": ["id_a", "id_b"]},
+    )
+
+    sql_str = str(mock_read_sql.call_args[0][0])
+    # t1側とt2側の両方にwhere条件が含まれる
+    assert sql_str.count('"target"') >= 2
+    assert sql_str.count("IN") >= 2
+
+
 def test_select_latest_per_group_with_list_where_generates_in_clause(
     client: DbClient, mock_engine: Engine, mocker: MockerFixture
 ) -> None:

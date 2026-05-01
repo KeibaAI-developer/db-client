@@ -226,12 +226,15 @@ class DbClient:
             ", ".join(f't1."{col}"' for col in columns) if columns is not None else "t1.*"
         )
         where_sql, params = self._build_where_clause(where, alias="t1")
+        sub_where_sql, _ = self._build_where_clause(where, alias="t2")
         where_part = f"WHERE {where_sql}" if where_sql else ""
         and_or_where = "AND" if where_sql else "WHERE"
 
+        sub_and = f" AND {sub_where_sql}" if sub_where_sql else ""
         sub_query = (
             f'SELECT MAX(t2."{order_by}") FROM {table_name} t2'
             f' WHERE t2."{group_by}" = t1."{group_by}"'
+            f"{sub_and}"
         )
         query = (
             f"SELECT {col_clause} FROM {table_name} t1"
