@@ -70,6 +70,9 @@ class DbClient:
         Returns:
             str: WHERE句の文字列（"WHERE"キーワードは含まない）
             dict[str, Any]: バインドパラメータ
+
+        Raises:
+            ValueError: whereの値に空リストが含まれる場合
         """
         if not where:
             return "", {}
@@ -80,6 +83,10 @@ class DbClient:
 
         for key, val in where.items():
             if isinstance(val, list):
+                if len(val) == 0:
+                    msg = f"where条件のリストが空です: キー '{key}'"
+                    self._logger.error(msg)
+                    raise ValueError(msg)
                 placeholders = ", ".join(f":where_{key}_{i}" for i in range(len(val)))
                 parts.append(f'{prefix}"{key}" IN ({placeholders})')
                 for i, v in enumerate(val):

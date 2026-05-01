@@ -167,16 +167,23 @@ def test_select_latest_per_group_returns_empty_when_no_data(
     assert result.empty
 
 
-def test_select_latest_per_group_raises_on_empty_columns(
-    client: DbClient, mock_engine: Engine, mocker: MockerFixture
-) -> None:
+def test_select_latest_per_group_raises_on_empty_columns(client: DbClient) -> None:
     """columnsが空リストの場合にValueErrorが発生する."""
-    mocker.patch("db_client._client.load_dotenv")
-
     with pytest.raises(ValueError):
         client.select_latest_per_group(
             table_name="ratings",
             group_by="target_id",
             order_by="race_code",
             columns=[],
+        )
+
+
+def test_select_latest_per_group_with_empty_list_raises_value_error(client: DbClient) -> None:
+    """whereの値が空リストの場合にValueErrorが発生する."""
+    with pytest.raises(ValueError, match="リストが空"):
+        client.select_latest_per_group(
+            table_name="ratings",
+            group_by="target_id",
+            order_by="race_code",
+            where={"target_id": []},
         )

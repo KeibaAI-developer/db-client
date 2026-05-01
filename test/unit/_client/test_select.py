@@ -158,6 +158,12 @@ def test_select_with_mixed_where_combines_eq_and_in(
     assert '"target_id"' in sql_str
 
 
+def test_select_with_empty_list_raises_value_error(client: DbClient) -> None:
+    """whereの値が空リストの場合にValueErrorが発生する."""
+    with pytest.raises(ValueError, match="リストが空"):
+        client.select(table_name="ratings", where={"target_id": []})
+
+
 # 準正常系
 def test_select_returns_empty_dataframe_when_no_records(
     client: DbClient, mock_engine: Engine, mocker: MockerFixture
