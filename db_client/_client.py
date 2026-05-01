@@ -56,6 +56,47 @@ class DbClient:
             self._logger.error(msg)
             raise ValueError(msg)
 
+    def _build_where_clause(
+        self,
+        where: dict[str, Any] | None,
+        alias: str = "",
+    ) -> tuple[str, dict[str, Any]]:
+        """WHERE句の文字列とバインドパラメータを構築する.
+
+        Args:
+            where (dict[str, Any] | None): フィルタ条件
+            alias (str): テーブルエイリアス。空文字列の場合はエイリアスなし
+
+        Returns:
+            str: WHERE句の文字列（"WHERE"キーワードは含まない）
+            dict[str, Any]: バインドパラメータ
+
+        Raises:
+            ValueError: whereの値に空リストが含まれる場合
+        """
+        if not where:
+            return "", {}
+
+        prefix = f"{alias}." if alias else ""
+        parts: list[str] = []
+        params: dict[str, Any] = {}
+
+        for key, val in where.items():
+            if isinstance(val, list):
+                if len(val) == 0:
+                    msg = f"where条件のリストが空です: キー '{key}'"
+                    self._logger.error(msg)
+                    raise ValueError(msg)
+                placeholders = ", ".join(f":where_{key}_{i}" for i in range(len(val)))
+                parts.append(f'{prefix}"{key}" IN ({placeholders})')
+                for i, v in enumerate(val):
+                    params[f"where_{key}_{i}"] = v
+            else:
+                parts.append(f'{prefix}"{key}" = :where_{key}')
+                params[f"where_{key}"] = val
+
+        return " AND ".join(parts), params
+
     def upsert(self, table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> None:
         """DataFrameを指定テーブルにupsertする.
 
@@ -122,8 +163,9 @@ class DbClient:
 
         Args:
             table_name (str): 対象テーブル名
-            where (dict[str, Any] | None): フィルタ条件。``{カラム名: 値}`` 形式で指定する
-                （AND結合）。Noneの場合は全件取得
+            where (dict[str, Any] | None): フィルタ条件（AND結合）。Noneの場合は全件取得。
+                値がリストの場合はIN条件（``{カラム名: [値1, 値2, ...]}``）、
+                それ以外は等値条件（``{カラム名: 値}``）として扱う
             columns (list[str] | None): 取得するカラム名のリスト。Noneの場合は全カラムを取得
 
         Returns:
@@ -141,19 +183,83 @@ class DbClient:
 
         col_clause = ", ".join(f'"{col}"' for col in columns) if columns is not None else "*"
 
+        where_sql, params = self._build_where_clause(where)
         query = f"SELECT {col_clause} FROM {table_name}"
-        params: dict[str, Any] = {}
-
-        if where:
-            conditions = " AND ".join(f'"{key}" = :where_{key}' for key in where)
-            query += f" WHERE {conditions}"
-            params = {f"where_{key}": val for key, val in where.items()}
+        if where_sql:
+            query += f" WHERE {where_sql}"
 
         self._logger.debug("select: クエリを実行します (table=%s, where=%s)", table_name, where)
         with self._engine.connect() as conn:
             result = pd.read_sql(text(query), conn, params=params)
         self._logger.info("select: %d件取得しました (table=%s)", len(result), table_name)
 
+        return result
+
+    def select_latest_per_group(
+        self,
+        table_name: str,
+        group_by: str,
+        order_by: str,
+        where: dict[str, Any] | None = None,
+        columns: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """各グループの最大order_byカラム値を持つ行をすべて取得する.
+
+        group_byカラムでグループ化し、各グループ内でorder_byが最大の行を
+        すべて返す。同一グループ・同一order_by値の行が複数ある場合
+        （例: 同一レースで調教師の複数頭出走）はすべて返す。
+
+        Args:
+            table_name (str): 対象テーブル名
+            group_by (str): グループ化するカラム名（例: ``"target_id"``）
+            order_by (str): 最大値を基準にするカラム名（例: ``"race_code"``）
+            where (dict[str, Any] | None): フィルタ条件（selectと同じ書式）
+            columns (list[str] | None): 取得するカラム名のリスト。Noneの場合は全カラムを取得
+
+        Returns:
+            pd.DataFrame: 各グループの最大order_by値を持つ全行のDataFrame
+
+        Raises:
+            ValueError: table_nameが無効、またはcolumnsが空リストの場合
+        """
+        self._validate_table_name(table_name)
+
+        if columns is not None and len(columns) == 0:
+            msg = "columnsが空リストです。カラムを指定するか、Noneを指定してください。"
+            self._logger.error(msg)
+            raise ValueError(msg)
+
+        col_clause = (
+            ", ".join(f't1."{col}"' for col in columns) if columns is not None else "t1.*"
+        )
+        where_sql, params = self._build_where_clause(where, alias="t1")
+        sub_where_sql, _ = self._build_where_clause(where, alias="t2")
+        where_part = f"WHERE {where_sql}" if where_sql else ""
+        and_or_where = "AND" if where_sql else "WHERE"
+
+        sub_and = f" AND {sub_where_sql}" if sub_where_sql else ""
+        sub_query = (
+            f'SELECT MAX(t2."{order_by}") FROM {table_name} t2'
+            f' WHERE t2."{group_by}" = t1."{group_by}"'
+            f"{sub_and}"
+        )
+        query = (
+            f"SELECT {col_clause} FROM {table_name} t1"
+            f" {where_part}"
+            f' {and_or_where} t1."{order_by}" = ({sub_query})'
+        )
+
+        self._logger.debug(
+            "select_latest_per_group: クエリを実行します (table=%s, group_by=%s, order_by=%s)",
+            table_name,
+            group_by,
+            order_by,
+        )
+        with self._engine.connect() as conn:
+            result = pd.read_sql(text(query), conn, params=params)
+        self._logger.info(
+            "select_latest_per_group: %d件取得しました (table=%s)", len(result), table_name
+        )
         return result
 
     def delete(self, table_name: str, where: dict[str, Any]) -> None:

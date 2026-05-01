@@ -96,6 +96,74 @@ def test_select_without_where_uses_asterisk(
     assert "WHERE" not in sql_str
 
 
+def test_select_with_list_where_generates_in_clause(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """whereの値がリストの場合にIN句が生成される."""
+    expected = pd.DataFrame({"target_id": ["a", "b"]})
+    mock_conn = mocker.MagicMock()
+    enter = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
+    mock_read_sql = mocker.patch("db_client._client.pd.read_sql", return_value=expected)
+
+    client.select(table_name="ratings", where={"target_id": ["a", "b"]})
+
+    call_args = mock_read_sql.call_args
+    sql_str = str(call_args[0][0])
+    assert "IN" in sql_str
+    assert '"target_id"' in sql_str
+
+
+def test_select_with_list_where_passes_all_values_as_params(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """whereのリスト値が個別パラメータとしてSQLに渡される."""
+    expected = pd.DataFrame()
+    mock_conn = mocker.MagicMock()
+    enter = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
+    mock_read_sql = mocker.patch("db_client._client.pd.read_sql", return_value=expected)
+
+    client.select(table_name="ratings", where={"target_id": ["horse_a", "horse_b", "horse_c"]})
+
+    call_args = mock_read_sql.call_args
+    params = call_args[1]["params"]
+    assert params["where_target_id_0"] == "horse_a"
+    assert params["where_target_id_1"] == "horse_b"
+    assert params["where_target_id_2"] == "horse_c"
+
+
+def test_select_with_mixed_where_combines_eq_and_in(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """whereにスカラーとリストが混在する場合、等値条件とIN条件がAND結合される."""
+    expected = pd.DataFrame()
+    mock_conn = mocker.MagicMock()
+    enter = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.connect.return_value.__enter__ = enter
+    mock_engine.connect.return_value.__exit__ = mocker.MagicMock(return_value=False)
+    mock_read_sql = mocker.patch("db_client._client.pd.read_sql", return_value=expected)
+
+    client.select(
+        table_name="ratings",
+        where={"target": "horse", "target_id": ["id_a", "id_b"]},
+    )
+
+    call_args = mock_read_sql.call_args
+    sql_str = str(call_args[0][0])
+    assert "IN" in sql_str
+    assert '"target"' in sql_str
+    assert '"target_id"' in sql_str
+
+
+def test_select_with_empty_list_raises_value_error(client: DbClient) -> None:
+    """whereの値が空リストの場合にValueErrorが発生する."""
+    with pytest.raises(ValueError, match="リストが空"):
+        client.select(table_name="ratings", where={"target_id": []})
+
+
 # 準正常系
 def test_select_returns_empty_dataframe_when_no_records(
     client: DbClient, mock_engine: Engine, mocker: MockerFixture
