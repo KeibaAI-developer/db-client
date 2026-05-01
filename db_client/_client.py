@@ -28,74 +28,28 @@ class DbClient:
     def __init__(self, dsn: str | None = None, logger: logging.Logger | None = None) -> None:
         """DbClientを初期化する.
 
-        dsnを省略した場合は ``.env`` ファイルまたは環境変数 ``DATABASE_URL`` から接続文字列を読み込む。
-        どちらも設定されていない場合は ``DsnNotConfiguredError`` を発生させる。
+        dsnを省略した場合は ``.env`` ファイルまたは環境変数
+        ``DB_HOST`` / ``DB_PORT`` / ``DB_NAME`` / ``DB_USER`` / ``DB_PASSWORD``
+        から接続文字列を構築する。解決できない場合は ``DsnNotConfiguredError`` を発生させる。
 
         Args:
             dsn (str | None): PostgreSQL接続文字列
                 （例: ``postgresql://user:pass@host:5432/dbname``）。
-                省略時は環境変数 ``DATABASE_URL`` を使用する
+                省略時は環境変数から構築する
             logger (logging.Logger | None): ロガーインスタンス。
                 Noneの場合はモジュール名でロガーを生成する
 
         Raises:
-            DsnNotConfiguredError: dsn および DATABASE_URL のどちらも設定されていない場合
+            DsnNotConfiguredError: dsnが未指定かつ必要な環境変数が不足している場合
         """
         self._logger = logger or logging.getLogger(__name__)
         load_dotenv()
-        resolved_dsn = dsn or os.environ.get("DATABASE_URL")
+        resolved_dsn = dsn or self._build_dsn_from_env()
         if not resolved_dsn:
-            msg = "dsn または環境変数 DATABASE_URL を設定してください。"
+            msg = "dsn または DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD を設定してください。"
             self._logger.error(msg)
             raise DsnNotConfiguredError(msg)
         self._engine: Engine = create_engine(resolved_dsn)
-
-    def _validate_table_name(self, table_name: str) -> None:
-        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
-            msg = f"無効なテーブル名です: {table_name!r}"
-            self._logger.error(msg)
-            raise ValueError(msg)
-
-    def _build_where_clause(
-        self,
-        where: dict[str, Any] | None,
-        alias: str = "",
-    ) -> tuple[str, dict[str, Any]]:
-        """WHERE句の文字列とバインドパラメータを構築する.
-
-        Args:
-            where (dict[str, Any] | None): フィルタ条件
-            alias (str): テーブルエイリアス。空文字列の場合はエイリアスなし
-
-        Returns:
-            str: WHERE句の文字列（"WHERE"キーワードは含まない）
-            dict[str, Any]: バインドパラメータ
-
-        Raises:
-            ValueError: whereの値に空リストが含まれる場合
-        """
-        if not where:
-            return "", {}
-
-        prefix = f"{alias}." if alias else ""
-        parts: list[str] = []
-        params: dict[str, Any] = {}
-
-        for key, val in where.items():
-            if isinstance(val, list):
-                if len(val) == 0:
-                    msg = f"where条件のリストが空です: キー '{key}'"
-                    self._logger.error(msg)
-                    raise ValueError(msg)
-                placeholders = ", ".join(f":where_{key}_{i}" for i in range(len(val)))
-                parts.append(f'{prefix}"{key}" IN ({placeholders})')
-                for i, v in enumerate(val):
-                    params[f"where_{key}_{i}"] = v
-            else:
-                parts.append(f'{prefix}"{key}" = :where_{key}')
-                params[f"where_{key}"] = val
-
-        return " AND ".join(parts), params
 
     def upsert(self, table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> None:
         """DataFrameを指定テーブルにupsertする.
@@ -229,9 +183,7 @@ class DbClient:
             self._logger.error(msg)
             raise ValueError(msg)
 
-        col_clause = (
-            ", ".join(f't1."{col}"' for col in columns) if columns is not None else "t1.*"
-        )
+        col_clause = ", ".join(f't1."{col}"' for col in columns) if columns is not None else "t1.*"
         where_sql, params = self._build_where_clause(where, alias="t1")
         sub_where_sql, _ = self._build_where_clause(where, alias="t2")
         where_part = f"WHERE {where_sql}" if where_sql else ""
@@ -305,3 +257,62 @@ class DbClient:
         with self._engine.begin() as conn:
             conn.execute(sql)
         self._logger.info("delete_all: 全レコードを削除しました (table=%s)", table_name)
+
+    @staticmethod
+    def _build_dsn_from_env() -> str | None:
+        """環境変数の個別設定からDSNを構築する."""
+        host = os.environ.get("DB_HOST")
+        name = os.environ.get("DB_NAME")
+        user = os.environ.get("DB_USER")
+        password = os.environ.get("DB_PASSWORD")
+        if not all([host, name, user, password]):
+            return None
+        port = os.environ.get("DB_PORT", "5432")
+        return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+
+    def _validate_table_name(self, table_name: str) -> None:
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
+            msg = f"無効なテーブル名です: {table_name!r}"
+            self._logger.error(msg)
+            raise ValueError(msg)
+
+    def _build_where_clause(
+        self,
+        where: dict[str, Any] | None,
+        alias: str = "",
+    ) -> tuple[str, dict[str, Any]]:
+        """WHERE句の文字列とバインドパラメータを構築する.
+
+        Args:
+            where (dict[str, Any] | None): フィルタ条件
+            alias (str): テーブルエイリアス。空文字列の場合はエイリアスなし
+
+        Returns:
+            str: WHERE句の文字列（"WHERE"キーワードは含まない）
+            dict[str, Any]: バインドパラメータ
+
+        Raises:
+            ValueError: whereの値に空リストが含まれる場合
+        """
+        if not where:
+            return "", {}
+
+        prefix = f"{alias}." if alias else ""
+        parts: list[str] = []
+        params: dict[str, Any] = {}
+
+        for key, val in where.items():
+            if isinstance(val, list):
+                if len(val) == 0:
+                    msg = f"where条件のリストが空です: キー '{key}'"
+                    self._logger.error(msg)
+                    raise ValueError(msg)
+                placeholders = ", ".join(f":where_{key}_{i}" for i in range(len(val)))
+                parts.append(f'{prefix}"{key}" IN ({placeholders})')
+                for i, v in enumerate(val):
+                    params[f"where_{key}_{i}"] = v
+            else:
+                parts.append(f'{prefix}"{key}" = :where_{key}')
+                params[f"where_{key}"] = val
+
+        return " AND ".join(parts), params
