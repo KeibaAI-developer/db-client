@@ -1,5 +1,7 @@
 """select_latest_per_groupメソッドの単体テスト."""
 
+from typing import Any
+
 import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
@@ -24,7 +26,7 @@ def client(mocker: MockerFixture, mock_engine: Engine) -> DbClient:
 
 def _setup_read_sql(
     mocker: MockerFixture, mock_engine: Engine, return_df: pd.DataFrame
-) -> MockerFixture:
+) -> Any:
     """pd.read_sqlのモックをセットアップするヘルパー."""
     mock_conn = mocker.MagicMock()
     mock_engine.connect.return_value.__enter__ = mocker.MagicMock(return_value=mock_conn)
