@@ -7,6 +7,7 @@ import logging
 import os
 import re
 from typing import Any, cast
+from urllib.parse import quote_plus
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -268,7 +269,7 @@ class DbClient:
         if not all([host, name, user, password]):
             return None
         port = os.environ.get("DB_PORT", "5432")
-        return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+        return f"postgresql://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/{name}"
 
     def _validate_table_name(self, table_name: str) -> None:
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
