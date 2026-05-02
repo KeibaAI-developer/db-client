@@ -268,6 +268,7 @@ class DbClient:
         password = os.environ.get("DB_PASSWORD")
         if not all([host, name, user, password]):
             return None
+        assert user is not None and password is not None
         port = os.environ.get("DB_PORT", "5432")
         return f"postgresql://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/{name}"
 
