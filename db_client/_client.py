@@ -318,6 +318,10 @@ class DbClient:
                 for i, v in enumerate(val):
                     params[f"where_{key}_{i}"] = v
             elif isinstance(val, dict):
+                if not val:
+                    msg = f"範囲条件のdictが空です: キー '{key}'"
+                    self._logger.error(msg)
+                    raise ValueError(msg)
                 unknown = set(val.keys()) - set(_RANGE_OPS.keys())
                 if unknown:
                     msg = (

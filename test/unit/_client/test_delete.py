@@ -176,3 +176,11 @@ def test_delete_raises_value_error_for_unknown_range_op(
     """範囲条件のキーが不正な場合にValueErrorが発生する."""
     with pytest.raises(ValueError, match="範囲条件のキーが不正です"):
         client.delete(table_name="ratings", where={"race_code": {"eq": "20220101"}})
+
+
+def test_delete_raises_value_error_for_empty_range_dict(
+    client: DbClient,
+) -> None:
+    """範囲条件のdictが空の場合にValueErrorが発生する."""
+    with pytest.raises(ValueError, match="範囲条件のdictが空です"):
+        client.delete(table_name="ratings", where={"race_code": {}})
