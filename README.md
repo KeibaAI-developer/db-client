@@ -69,8 +69,29 @@ filtered = client.select(
     columns=["id", "value"],
 )
 
-# delete: 条件を指定してレコードを削除
+# select with IN condition
+filtered = client.select(
+    table_name="my_table",
+    where={"id": ["001", "002"]},
+)
+
+# delete: 条件を指定してレコードを削除（等値条件）
 client.delete(table_name="my_table", where={"id": "001"})
+
+# delete with IN condition
+client.delete(table_name="my_table", where={"id": ["001", "002"]})
+
+# delete with range condition
+client.delete(
+    table_name="my_table",
+    where={"race_code": {"gte": "20220101", "lt": "20230101"}},
+)
+
+# delete with combined conditions
+client.delete(
+    table_name="my_table",
+    where={"target": "horse", "race_code": {"gte": "20220101", "lt": "20230101"}},
+)
 
 # delete_all: テーブルの全レコードを削除
 client.delete_all(table_name="my_table")
@@ -105,8 +126,18 @@ client.delete_all(table_name="my_table")
 | 引数 | 型 | 説明 |
 |---|---|---|
 | `table_name` | `str` | 対象テーブル名 |
-| `where` | `dict[str, Any] \| None` | フィルタ条件。`{カラム名: 値}` 形式（AND結合）。`None` の場合は全件取得 |
+| `where` | `dict[str, Any] \| None` | フィルタ条件（AND結合）。`None` の場合は全件取得 |
 | `columns` | `list[str] \| None` | 取得するカラム名のリスト。`None` の場合は全カラムを取得 |
+
+`where` の値には以下の3形式を指定できる（AND結合）。
+
+| 形式 | 例 | SQL |
+|---|---|---|
+| 等値条件 | `{"id": "001"}` | `"id" = '001'` |
+| IN条件 | `{"id": ["001", "002"]}` | `"id" IN ('001', '002')` |
+| 範囲条件 | `{"code": {"gte": "20220101", "lt": "20230101"}}` | `"code" >= '20220101' AND "code" < '20230101'` |
+
+範囲条件のキーは `gte`（>=）, `lte`（<=）, `gt`（>）, `lt`（<）。
 
 該当レコードが存在しない場合は空のDataFrameを返す。
 
@@ -115,8 +146,9 @@ client.delete_all(table_name="my_table")
 | 引数 | 型 | 説明 |
 |---|---|---|
 | `table_name` | `str` | 対象テーブル名 |
-| `where` | `dict[str, Any]` | 削除条件。`{カラム名: 値}` 形式（AND結合） |
+| `where` | `dict[str, Any]` | 削除条件（AND結合）。`select` の `where` と同じ書式を受け付ける |
 
+`where` の値には等値条件・IN条件・範囲条件を指定できる（`select` の `where` 参照）。
 `where` が空の場合は `EmptyWhereError` を発生させる（全件削除の誤操作を防ぐ）。
 
 ### `delete_all(table_name) -> None`

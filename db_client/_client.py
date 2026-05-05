@@ -15,6 +15,8 @@ from sqlalchemy import Engine, create_engine, text
 
 from db_client.exceptions import DsnNotConfiguredError, EmptyWhereError
 
+_RANGE_OPS: dict[str, str] = {"gte": ">=", "lte": "<=", "gt": ">", "lt": "<"}
+
 
 class DbClient:
     """PostgreSQLとのデータ入出力を担うクライアント.
@@ -106,7 +108,7 @@ class DbClient:
         self._logger.debug("upsert: %d件をupsertします (table=%s)", len(records), table_name)
         with self._engine.begin() as conn:
             conn.execute(sql, records)
-        self._logger.info("upsert: %d件をupsertしました (table=%s)", len(records), table_name)
+        self._logger.debug("upsert: %d件をupsertしました (table=%s)", len(records), table_name)
 
     def select(
         self,
@@ -146,7 +148,7 @@ class DbClient:
         self._logger.debug("select: クエリを実行します (table=%s, where=%s)", table_name, where)
         with self._engine.connect() as conn:
             result = pd.read_sql(text(query), conn, params=params)
-        self._logger.info("select: %d件取得しました (table=%s)", len(result), table_name)
+        self._logger.debug("select: %d件取得しました (table=%s)", len(result), table_name)
 
         return result
 
@@ -210,7 +212,7 @@ class DbClient:
         )
         with self._engine.connect() as conn:
             result = pd.read_sql(text(query), conn, params=params)
-        self._logger.info(
+        self._logger.debug(
             "select_latest_per_group: %d件取得しました (table=%s)", len(result), table_name
         )
         return result
@@ -220,7 +222,10 @@ class DbClient:
 
         Args:
             table_name (str): 対象テーブル名
-            where (dict[str, Any]): 削除条件。``{カラム名: 値}`` 形式で指定する（AND結合）
+            where (dict[str, Any]): 削除条件（AND結合）。selectと同じ書式を受け付ける。
+                値がリストの場合はIN条件（``{カラム名: [値1, 値2, ...]}``）、
+                値がdictの場合は範囲条件（``{カラム名: {"gte": 値, "lte": 値, "gt": 値, "lt": 値}}``）、
+                それ以外は等値条件（``{カラム名: 値}``）として扱う
 
         Raises:
             EmptyWhereError: where が空の場合（全件削除の誤操作を防ぐ）
@@ -232,9 +237,8 @@ class DbClient:
             self._logger.error(msg)
             raise EmptyWhereError(msg)
 
-        conditions = " AND ".join(f'"{key}" = :where_{key}' for key in where)
-        params = {f"where_{key}": val for key, val in where.items()}
-        sql = text(f"DELETE FROM {table_name} WHERE {conditions}")
+        where_sql, params = self._build_where_clause(where)
+        sql = text(f"DELETE FROM {table_name} WHERE {where_sql}")
 
         self._logger.debug("delete: レコードを削除します (table=%s, where=%s)", table_name, where)
         with self._engine.begin() as conn:
@@ -294,7 +298,7 @@ class DbClient:
             dict[str, Any]: バインドパラメータ
 
         Raises:
-            ValueError: whereの値に空リストが含まれる場合
+            ValueError: whereの値に空リストが含まれる場合、または範囲条件のキーが不正な場合
         """
         if not where:
             return "", {}
@@ -313,6 +317,23 @@ class DbClient:
                 parts.append(f'{prefix}"{key}" IN ({placeholders})')
                 for i, v in enumerate(val):
                     params[f"where_{key}_{i}"] = v
+            elif isinstance(val, dict):
+                if not val:
+                    msg = f"範囲条件のdictが空です: キー '{key}'"
+                    self._logger.error(msg)
+                    raise ValueError(msg)
+                unknown = set(val.keys()) - set(_RANGE_OPS.keys())
+                if unknown:
+                    msg = (
+                        f"範囲条件のキーが不正です: {unknown}（使用可能: {set(_RANGE_OPS.keys())}）"
+                    )
+                    self._logger.error(msg)
+                    raise ValueError(msg)
+                for op_key, op_sql in _RANGE_OPS.items():
+                    if op_key in val:
+                        param_key = f"where_{key}_{op_key}"
+                        parts.append(f'{prefix}"{key}" {op_sql} :{param_key}')
+                        params[param_key] = val[op_key]
             else:
                 parts.append(f'{prefix}"{key}" = :where_{key}')
                 params[f"where_{key}"] = val
