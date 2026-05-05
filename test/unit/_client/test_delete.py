@@ -80,7 +80,7 @@ def test_delete_passes_params_to_execute(
 def test_delete_with_in_condition(
     client: DbClient, mock_engine: Engine, mocker: MockerFixture
 ) -> None:
-    """値がリストの場合にIN条件がSQL文に含まれる."""
+    """値がリストの場合にIN条件がSQL文に含まれ、paramsが正しく渡される."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
     mock_engine.begin.return_value.__enter__ = enter
@@ -94,12 +94,14 @@ def test_delete_with_in_condition(
     call_args = mock_conn.execute.call_args
     sql_str = str(call_args[0][0])
     assert "IN" in sql_str
+    params = call_args[0][1]
+    assert params == {"where_race_code_0": "2022010101", "where_race_code_1": "2022010102"}
 
 
 def test_delete_with_range_condition_gte(
     client: DbClient, mock_engine: Engine, mocker: MockerFixture
 ) -> None:
-    """値がdictでgteを含む場合に>=条件がSQL文に含まれる."""
+    """値がdictでgteを含む場合に>=条件がSQL文に含まれ、paramsが正しく渡される."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
     mock_engine.begin.return_value.__enter__ = enter
@@ -114,12 +116,14 @@ def test_delete_with_range_condition_gte(
     sql_str = str(call_args[0][0])
     assert ">=" in sql_str
     assert '"race_code"' in sql_str
+    params = call_args[0][1]
+    assert params == {"where_race_code_gte": "20220101"}
 
 
 def test_delete_with_range_condition_lt(
     client: DbClient, mock_engine: Engine, mocker: MockerFixture
 ) -> None:
-    """値がdictでltを含む場合に<条件がSQL文に含まれる."""
+    """値がdictでltを含む場合に<条件がSQL文に含まれ、paramsが正しく渡される."""
     mock_conn = mocker.MagicMock()
     enter = mocker.MagicMock(return_value=mock_conn)
     mock_engine.begin.return_value.__enter__ = enter
@@ -134,6 +138,8 @@ def test_delete_with_range_condition_lt(
     sql_str = str(call_args[0][0])
     assert "< " in sql_str
     assert '"race_code"' in sql_str
+    params = call_args[0][1]
+    assert params == {"where_race_code_lt": "20230101"}
 
 
 def test_delete_with_range_and_eq_condition(
