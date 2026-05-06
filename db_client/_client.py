@@ -152,6 +152,50 @@ class DbClient:
 
         return result
 
+    def select_max(
+        self,
+        table_name: str,
+        column: str,
+        where: dict[str, Any] | None = None,
+    ) -> Any | None:
+        """指定カラムの最大値を返す.
+
+        データが存在しない場合はNoneを返す。
+
+        Args:
+            table_name (str): 対象テーブル名
+            column (str): 最大値を取得するカラム名
+            where (dict[str, Any] | None): フィルタ条件（selectと同じ書式）
+
+        Returns:
+            Any: 指定カラムの最大値。該当レコードが存在しない場合はNone
+
+        Raises:
+            ValueError: table_nameまたはcolumnが無効な場合。
+                whereの値に空リスト・空dict、または不正な範囲条件キーが含まれる場合
+        """
+        self._validate_table_name(table_name)
+        self._validate_column_name(column)
+
+        where_sql, params = self._build_where_clause(where)
+        query = f'SELECT MAX("{column}") AS max_val FROM {table_name}'
+        if where_sql:
+            query += f" WHERE {where_sql}"
+
+        self._logger.debug(
+            "select_max: クエリを実行します (table=%s, column=%s, where=%s)",
+            table_name,
+            column,
+            where,
+        )
+        with self._engine.connect() as conn:
+            result = pd.read_sql(text(query), conn, params=params)
+        max_val = result["max_val"].iloc[0]
+        self._logger.debug(
+            "select_max: 最大値=%s (table=%s, column=%s)", max_val, table_name, column
+        )
+        return None if pd.isna(max_val) else max_val
+
     def select_latest_per_group(
         self,
         table_name: str,
@@ -279,6 +323,12 @@ class DbClient:
     def _validate_table_name(self, table_name: str) -> None:
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
             msg = f"無効なテーブル名です: {table_name!r}"
+            self._logger.error(msg)
+            raise ValueError(msg)
+
+    def _validate_column_name(self, column: str) -> None:
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", column):
+            msg = f"無効なカラム名です: {column!r}"
             self._logger.error(msg)
             raise ValueError(msg)
 
