@@ -157,7 +157,7 @@ class DbClient:
         table_name: str,
         column: str,
         where: dict[str, Any] | None = None,
-    ) -> Any:
+    ) -> Any | None:
         """指定カラムの最大値を返す.
 
         データが存在しない場合はNoneを返す。
