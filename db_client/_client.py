@@ -171,7 +171,8 @@ class DbClient:
             Any: 指定カラムの最大値。該当レコードが存在しない場合はNone
 
         Raises:
-            ValueError: table_nameが無効な場合
+            ValueError: table_nameまたはcolumnが無効な場合。
+                whereの値に空リスト・空dict、または不正な範囲条件キーが含まれる場合
         """
         self._validate_table_name(table_name)
         self._validate_column_name(column)
