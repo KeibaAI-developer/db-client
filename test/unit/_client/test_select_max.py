@@ -118,3 +118,9 @@ def test_select_max_raises_on_invalid_table_name(client: DbClient, mocker: Mocke
     """無効なテーブル名を指定した場合にValueErrorを発生させる."""
     with pytest.raises(ValueError, match="無効なテーブル名"):
         client.select_max(table_name="invalid-table!", column="race_code")
+
+
+def test_select_max_raises_on_invalid_column_name(client: DbClient, mocker: MockerFixture) -> None:
+    """無効なカラム名を指定した場合にValueErrorを発生させる."""
+    with pytest.raises(ValueError, match="無効なカラム名"):
+        client.select_max(table_name="ratings", column='invalid"; DROP TABLE ratings; --')

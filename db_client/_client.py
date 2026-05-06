@@ -174,6 +174,7 @@ class DbClient:
             ValueError: table_nameが無効な場合
         """
         self._validate_table_name(table_name)
+        self._validate_column_name(column)
 
         where_sql, params = self._build_where_clause(where)
         query = f'SELECT MAX("{column}") AS max_val FROM {table_name}'
@@ -321,6 +322,12 @@ class DbClient:
     def _validate_table_name(self, table_name: str) -> None:
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
             msg = f"無効なテーブル名です: {table_name!r}"
+            self._logger.error(msg)
+            raise ValueError(msg)
+
+    def _validate_column_name(self, column: str) -> None:
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", column):
+            msg = f"無効なカラム名です: {column!r}"
             self._logger.error(msg)
             raise ValueError(msg)
 
