@@ -57,12 +57,17 @@ class DbClient:
     def setup_table(self, ddl: str) -> None:
         """DDLを実行してテーブルとインデックスを作成する（IF NOT EXISTS）.
 
+        `;` 区切りで複数のSQL文を含むDDLを安全に実行できる。
+
         Args:
-            ddl (str): テーブルとインデックスを作成するDDL文字列
+            ddl (str): テーブルとインデックスを作成するDDL文字列。
+                複数のSQL文を `;` で区切って渡すことができる
         """
-        self._logger.debug("setup_table: DDLを実行します")
+        statements = [s.strip() for s in ddl.split(";") if s.strip()]
+        self._logger.debug("setup_table: DDLを実行します (%d文)", len(statements))
         with self._engine.begin() as conn:
-            conn.execute(text(ddl))
+            for stmt in statements:
+                conn.execute(text(stmt))
         self._logger.debug("setup_table: DDLを実行しました")
 
     def drop_table(self, table_name: str) -> None:
