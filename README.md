@@ -26,11 +26,15 @@ pip install -e /path/to/db-client
 
 ## セットアップ
 
-`.env` ファイルまたは環境変数 `DATABASE_URL` に接続文字列を設定すると、`dsn` 引数を省略できる。
+`.env` ファイルまたは環境変数に接続情報を設定すると、`dsn` 引数を省略できる。
 
 ```bash
 # .env ファイル（推奨）
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=keibaai
+DB_USER=postgres
+DB_PASSWORD=postgres
 ```
 
 `.env.example` を参照。
@@ -42,7 +46,7 @@ import logging
 from db_client import DbClient
 import pandas as pd
 
-# DATABASE_URL を設定している場合は dsn を省略できる
+# 環境変数（DB_HOST 等）を設定している場合は dsn を省略できる
 client = DbClient()
 
 # dsn を直接渡すこともできる（こちらが優先される）
@@ -95,6 +99,33 @@ client.delete(
 
 # delete_all: テーブルの全レコードを削除
 client.delete_all(table_name="my_table")
+
+# select_max: 指定カラムの最大値を取得
+max_code = client.select_max(table_name="my_table", column="race_code")
+max_code_filtered = client.select_max(
+    table_name="my_table",
+    column="race_code",
+    where={"target": "horse"},
+)
+
+# select_latest_per_group: グループごとの最新行を取得
+latest_df = client.select_latest_per_group(
+    table_name="my_table",
+    group_by="target_id",
+    order_by="race_code",
+    where={"target": "horse"},
+    columns=["target_id", "race_code", "mu_after"],
+)
+
+# setup_table: DDLを実行してテーブルとインデックスを作成
+ddl = """
+CREATE TABLE IF NOT EXISTS my_table (id SERIAL PRIMARY KEY, name VARCHAR(100));
+CREATE INDEX IF NOT EXISTS my_table_name ON my_table (name);
+"""
+client.setup_table(ddl)
+
+# drop_table: テーブルを削除（IF EXISTS）
+client.drop_table(table_name="my_table")
 ```
 
 詳細な使用例は [example/basic_usage.py](example/basic_usage.py) を参照。
@@ -105,11 +136,30 @@ client.delete_all(table_name="my_table")
 
 | 引数 | 型 | 説明 |
 |---|---|---|
-| `dsn` | `str \| None` | PostgreSQL接続文字列（例: `postgresql://user:pass@host:5432/dbname`）。省略時は `DATABASE_URL` 環境変数を使用する |
+| `dsn` | `str \| None` | PostgreSQL接続文字列（例: `postgresql://user:pass@host:5432/dbname`）。省略時は `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` 環境変数から構築する |
 | `logger` | `logging.Logger \| None` | ロガーインスタンス。`None` の場合はモジュール名でロガーを生成する |
 
-`dsn` と `DATABASE_URL` の両方が未設定の場合は `DbClientError` を発生させる。
+`dsn` も個別環境変数も未設定の場合は `DsnNotConfiguredError` を発生させる。
 接続プールを内部で保持し、各メソッド呼び出しで再利用する。
+
+### `setup_table(ddl) -> None`
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `ddl` | `str` | テーブルとインデックスを作成するDDL文字列 |
+
+DDL文字列を実行してテーブルとインデックスを作成する。`IF NOT EXISTS` を用いることで冪等に実行できる。
+`;` 区切りで複数のSQL文を含む文字列を渡した場合は各文を個別に実行する。1つのトランザクション内で実行されるため、途中でエラーが発生した場合はロールバックされる。
+テーブル定義（DDL文字列）は各利用ライブラリの `params.py` で定数として管理する。
+
+### `drop_table(table_name) -> None`
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `table_name` | `str` | 削除するテーブル名 |
+
+指定テーブルを削除する（`IF EXISTS`）。テーブルが存在しない場合は何もしない。
+無効なテーブル名（記号を含む等）の場合は `ValueError` を発生させる。
 
 ### `upsert(table_name, df, primary_keys) -> None`
 
@@ -141,6 +191,29 @@ client.delete_all(table_name="my_table")
 
 該当レコードが存在しない場合は空のDataFrameを返す。
 
+### `select_max(table_name, column, where=None) -> Any | None`
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `table_name` | `str` | 対象テーブル名 |
+| `column` | `str` | 最大値を取得するカラム名 |
+| `where` | `dict[str, Any] \| None` | フィルタ条件（`select` の `where` と同じ書式） |
+
+指定カラムの最大値を返す。該当レコードが存在しない場合は `None` を返す。
+
+### `select_latest_per_group(table_name, group_by, order_by, where=None, columns=None) -> pd.DataFrame`
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `table_name` | `str` | 対象テーブル名 |
+| `group_by` | `str` | グループ化するカラム名（例: `"target_id"`） |
+| `order_by` | `str` | 最大値を基準にするカラム名（例: `"race_code"`） |
+| `where` | `dict[str, Any] \| None` | フィルタ条件（`select` の `where` と同じ書式） |
+| `columns` | `list[str] \| None` | 取得するカラム名のリスト。`None` の場合は全カラムを取得 |
+
+`group_by` カラムでグループ化し、各グループ内で `order_by` が最大の行をすべて返す。
+同一グループ・同一 `order_by` 値の行が複数ある場合（例: 同一レースで調教師が複数頭出走）はすべて返す。
+
 ### `delete(table_name, where) -> None`
 
 | 引数 | 型 | 説明 |
@@ -159,12 +232,13 @@ client.delete_all(table_name="my_table")
 
 全件削除を明示的に行うための専用メソッド。`delete` メソッドとは分離している。
 
+
 ## エラーハンドリング
 
 | 例外クラス | 発生条件 |
 |---|---|
 | `DbClientError` | 全ての例外の基底クラス |
-| `DsnNotConfiguredError` | `dsn` および `DATABASE_URL` のどちらも未設定の場合 |
+| `DsnNotConfiguredError` | `dsn` も個別環境変数（`DB_HOST` 等）も未設定の場合 |
 | `EmptyWhereError` | `delete` に空の `where` を渡した場合（全件削除誤操作防止） |
 
 ```python

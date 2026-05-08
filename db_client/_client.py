@@ -54,6 +54,37 @@ class DbClient:
             raise DsnNotConfiguredError(msg)
         self._engine: Engine = create_engine(resolved_dsn)
 
+    def setup_table(self, ddl: str) -> None:
+        """DDLを実行してテーブルとインデックスを作成する（IF NOT EXISTS）.
+
+        `;` 区切りで複数のSQL文を含むDDLを安全に実行できる。
+
+        Args:
+            ddl (str): テーブルとインデックスを作成するDDL文字列。
+                複数のSQL文を `;` で区切って渡すことができる
+        """
+        statements = [s.strip() for s in ddl.split(";") if s.strip()]
+        self._logger.debug("setup_table: DDLを実行します (%d文)", len(statements))
+        with self._engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+        self._logger.debug("setup_table: DDLを実行しました")
+
+    def drop_table(self, table_name: str) -> None:
+        """指定テーブルを削除する（IF EXISTS）.
+
+        Args:
+            table_name (str): 削除するテーブル名
+
+        Raises:
+            ValueError: table_nameが無効な場合
+        """
+        self._validate_table_name(table_name)
+        self._logger.debug("drop_table: テーブルを削除します (table=%s)", table_name)
+        with self._engine.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+        self._logger.debug("drop_table: テーブルを削除しました (table=%s)", table_name)
+
     def upsert(self, table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> None:
         """DataFrameを指定テーブルにupsertする.
 
