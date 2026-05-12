@@ -1,5 +1,7 @@
 """upsertメソッドの単体テスト."""
 
+import json
+
 import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
@@ -77,6 +79,96 @@ def test_upsert_passes_records_to_execute(
     assert len(records) == 2
     assert records[0]["race_code"] == "202301010101"
     assert records[1]["race_code"] == "202301010102"
+
+
+def test_upsert_converts_dict_value_to_json_string(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """dict型の値がJSON文字列に変換されてexecuteに渡される."""
+    mock_conn = mocker.MagicMock()
+    mock_engine.begin.return_value.__enter__ = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    extra = {"key1": "value1", "key2": 2}
+    df = pd.DataFrame({"race_code": ["202301010101"], "extra": [extra]})
+    client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
+
+    records = mock_conn.execute.call_args[0][1]
+    assert records[0]["extra"] == json.dumps(extra, ensure_ascii=False)
+
+
+def test_upsert_preserves_non_ascii_in_dict_value(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """dict値に日本語が含まれるとき、ensure_ascii=Falseで変換される."""
+    mock_conn = mocker.MagicMock()
+    mock_engine.begin.return_value.__enter__ = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    extra = {"名前": "テスト"}
+    df = pd.DataFrame({"race_code": ["202301010101"], "extra": [extra]})
+    client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
+
+    records = mock_conn.execute.call_args[0][1]
+    assert "テスト" in records[0]["extra"]
+    assert records[0]["extra"] == '{"名前": "テスト"}'
+
+
+def test_upsert_does_not_convert_non_dict_values(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """str・int・float型の値はそのままexecuteに渡される."""
+    mock_conn = mocker.MagicMock()
+    mock_engine.begin.return_value.__enter__ = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    df = pd.DataFrame(
+        {"race_code": ["202301010101"], "name": ["horse_a"], "rating": [1500.0], "rank": [1]}
+    )
+    client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
+
+    records = mock_conn.execute.call_args[0][1]
+    assert records[0]["name"] == "horse_a"
+    assert records[0]["rating"] == 1500.0
+    assert records[0]["rank"] == 1
+
+
+def test_upsert_converts_all_dict_columns_in_single_record(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """1レコード内の複数のdict型カラムがすべてJSON文字列に変換される."""
+    mock_conn = mocker.MagicMock()
+    mock_engine.begin.return_value.__enter__ = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    extra1 = {"a": 1}
+    extra2 = {"b": 2}
+    df = pd.DataFrame({"race_code": ["202301010101"], "col1": [extra1], "col2": [extra2]})
+    client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
+
+    records = mock_conn.execute.call_args[0][1]
+    assert records[0]["col1"] == json.dumps(extra1, ensure_ascii=False)
+    assert records[0]["col2"] == json.dumps(extra2, ensure_ascii=False)
+
+
+def test_upsert_converts_dict_values_across_multiple_records(
+    client: DbClient, mock_engine: Engine, mocker: MockerFixture
+) -> None:
+    """複数レコードのdict型カラムがすべてJSON文字列に変換される."""
+    mock_conn = mocker.MagicMock()
+    mock_engine.begin.return_value.__enter__ = mocker.MagicMock(return_value=mock_conn)
+    mock_engine.begin.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    extra0 = {"x": 10}
+    extra1 = {"y": 20}
+    df = pd.DataFrame(
+        {"race_code": ["202301010101", "202301010102"], "extra": [extra0, extra1]}
+    )
+    client.upsert(table_name="ratings", df=df, primary_keys=["race_code"])
+
+    records = mock_conn.execute.call_args[0][1]
+    assert records[0]["extra"] == json.dumps(extra0, ensure_ascii=False)
+    assert records[1]["extra"] == json.dumps(extra1, ensure_ascii=False)
 
 
 # 準正常系
