@@ -63,6 +63,13 @@ df = pd.DataFrame({
 })
 client.upsert(table_name="my_table", df=df, primary_keys=["id"])
 
+# upsert with JSONB column: dict型セルは自動的にJSON文字列に変換される
+df = pd.DataFrame({
+    "id": ["001", "002"],
+    "meta": [{"key": "a", "score": 1.0}, {"key": "b", "score": 2.0}],
+})
+client.upsert(table_name="my_table", df=df, primary_keys=["id"])
+
 # select: テーブルからDataFrameを取得
 all_rows = client.select(table_name="my_table")
 
@@ -170,6 +177,8 @@ DDL文字列を実行してテーブルとインデックスを作成する。`I
 | `primary_keys` | `list[str]` | 重複判定に使用する主キーカラム名のリスト |
 
 主キーが一致するレコードが既存の場合、非主キーカラムを上書きする。`df` が空の場合は何もしない。
+
+DataFrame のセルに `dict` 型が含まれる場合は JSON 文字列に自動変換して挿入するため、JSONB カラムへの保存に対応している。
 
 ### `select(table_name, where=None, columns=None) -> pd.DataFrame`
 

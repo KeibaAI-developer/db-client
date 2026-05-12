@@ -3,6 +3,7 @@
 PostgreSQLとのデータ入出力を行うDbClientクラスを提供する。
 """
 
+import json
 import logging
 import os
 import re
@@ -136,6 +137,10 @@ class DbClient:
         )
 
         records = cast(list[dict[str, Any]], df.to_dict(orient="records"))
+        for record in records:
+            for key, value in record.items():
+                if isinstance(value, dict):
+                    record[key] = json.dumps(value, ensure_ascii=False)
         self._logger.debug("upsert: %d件をupsertします (table=%s)", len(records), table_name)
         with self._engine.begin() as conn:
             conn.execute(sql, records)
