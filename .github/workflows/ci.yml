@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci:
-    uses: KeibaAI-developer/library-workflow/.github/workflows/ci.yml@main
+    uses: KeibaAI-developer/library-workflow/.github/workflows/ci.yml@develop
     with:
       package_name: db_client
       repo_name: db-client
